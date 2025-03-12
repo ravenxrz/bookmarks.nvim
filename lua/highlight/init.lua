@@ -10,6 +10,7 @@ local config = {
 -- 书签数据
 local bookmarks = {}
 local namespace_id = nil
+local attached_buffers = {}
 
 -- 获取 buffer 名称
 local function get_buf_name(bufnr)
@@ -39,9 +40,21 @@ local function clear_highlight(bufnr, line_number)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace_id, line_number - 1, line_number)
 end
 
+
 -- 保存书签
 local function save_bookmarks()
-  local encoded = vim.json.encode(bookmarks)
+  -- 转换 bookmarks 为可编码的数据结构
+  local encoded_bookmarks = {}
+  for buf_name, bookmarked_lines in pairs(bookmarks) do
+    local encoded_lines = {}
+    for line_number, _ in pairs(bookmarked_lines) do
+      table.insert(encoded_lines, line_number)
+    end
+    encoded_bookmarks[buf_name] = encoded_lines
+  end
+
+
+  local encoded = vim.json.encode(encoded_bookmarks)
   local file = io.open(config.file_path, "w")
   if not file then
     return
@@ -71,14 +84,22 @@ local function load_bookmarks()
     return
   end
 
-  bookmarks = decoded
+  -- 转换回 bookmarks 当前格式
+  bookmarks = {}
+  for buf_name, encoded_lines in pairs(decoded) do
+    local bookmarked_lines = {}
+    for _, line_number in ipairs(encoded_lines) do
+      bookmarked_lines[line_number] = true
+    end
+    bookmarks[buf_name] = bookmarked_lines
+  end
 
   -- 加载书签后应用高亮
   for buf_name, bookmarked_lines in pairs(bookmarks) do
     local bufnr = vim.fn.bufnr(buf_name)
     if bufnr > 0 then
-      for _, line in ipairs(bookmarked_lines) do
-        apply_highlight(bufnr, line)
+      for line_number, _ in pairs(bookmarked_lines) do
+        apply_highlight(bufnr, line_number)
       end
     end
   end
@@ -104,21 +125,13 @@ local function toggle_bookmark()
   bookmarks[buf_name] = bookmarks[buf_name] or {}
   local bookmarked_lines = bookmarks[buf_name]
 
-  local index = nil
-  for i, line in ipairs(bookmarked_lines) do
-    if line == line_number then
-      index = i
-      break
-    end
-  end
-
-  if index then
+  if bookmarked_lines[line_number] then
     -- 移除书签
-    table.remove(bookmarked_lines, index)
+    bookmarked_lines[line_number] = nil
     clear_highlight(bufnr, line_number)
   else
     -- 添加书签
-    table.insert(bookmarked_lines, line_number)
+    bookmarked_lines[line_number] = true
     apply_highlight(bufnr, line_number)
   end
 
@@ -139,14 +152,14 @@ local function list_bookmarks_telescope(all_buffers)
     if all_buffers or buf_name == current_buf_name then
       local bufnr = vim.fn.bufnr(buf_name)
       if bufnr > 0 then
-        for _, line in ipairs(bookmarked_lines) do
-          local line_content = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
+        for line_number, _ in pairs(bookmarked_lines) do
+          local line_content = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1]
           table.insert(entries, {
-            value = buf_name .. ":" .. line .. ": " .. line_content,
+            value = buf_name .. ":" .. line_number .. ": " .. line_content,
             bufnr = bufnr,
-            line = line,
+            line = line_number,
             filename = buf_name,
-            display = string.format("%s:%s: %s", buf_name, line, line_content),
+            display = string.format("%s:%s: %s", buf_name, line_number, line_content),
           })
         end
       end
@@ -190,6 +203,56 @@ local function setup_highlight()
   vim.api.nvim_set_hl(0, config.highlight_group, { bg = "#458588" })
 end
 
+-- 更新书签行号
+local function update_bookmark_lines(bufnr, start_line, delta)
+  local buf_name = get_buf_name(bufnr)
+  local bookmarked_lines = bookmarks[buf_name]
+  if not bookmarked_lines then
+    return
+  end
+
+  changed = false
+  local new_bookmarked_lines = {}
+  for line_number, _ in pairs(bookmarked_lines) do
+    if line_number >= start_line then
+      new_bookmarked_lines[line_number + delta] = true
+      changed = true
+    else
+      new_bookmarked_lines[line_number] = true
+    end
+  end
+
+  bookmarks[buf_name] = new_bookmarked_lines
+  if changed then
+    save_bookmarks()
+  end
+end
+
+-- 附加缓冲区监听
+local function attach_buffer(bufnr)
+  if attached_buffers[bufnr] then
+    return
+  end
+
+  local opts = {
+    on_lines = function(_, _, _, first_line, last_line, new_last_line)
+      local old_count = last_line - first_line
+      local new_count = new_last_line - first_line
+      local delta = new_count - old_count
+      if delta == 0 then
+        return
+      end
+      update_bookmark_lines(bufnr, first_line + 1, delta)
+    end,
+    on_bytes = function(...) end,       -- 可选：处理字节变化
+    on_changedtick = function(...) end, -- 可选：处理 changedtick 变化
+    on_detach = function(...) end,      -- 可选：处理分离
+  }
+
+  vim.api.nvim_buf_attach(bufnr, false, opts)
+  attached_buffers[bufnr] = true
+end
+
 -- 设置自动命令
 local function setup_autocommands()
   vim.api.nvim_create_autocmd("BufEnter", {
@@ -197,16 +260,11 @@ local function setup_autocommands()
       local bufnr = event.buf
       local buf_name = get_buf_name(bufnr)
       if bookmarks[buf_name] then
-        for _, line in ipairs(bookmarks[buf_name]) do
-          apply_highlight(bufnr, line)
+        for line_number, _ in pairs(bookmarks[buf_name]) do
+          apply_highlight(bufnr, line_number)
         end
       end
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("BufWritePost", {
-    callback = function()
-      save_bookmarks()
+      attach_buffer(bufnr)
     end,
   })
 end
@@ -226,7 +284,7 @@ local function clear_current_buffer_bookmarks(bufnr)
 
   if bookmarks[buf_name] then
     -- 清除高亮
-    for _, line_number in ipairs(bookmarks[buf_name]) do
+    for line_number, _ in pairs(bookmarks[buf_name]) do
       clear_highlight(bufnr, line_number)
     end
 
@@ -242,7 +300,7 @@ local function clear_all_bookmarks()
     local bufnr = vim.fn.bufnr(buf_name)
     if bufnr ~= -1 then
       -- 清除高亮
-      for _, line_number in ipairs(bookmarked_lines) do
+      for line_number, _ in pairs(bookmarked_lines) do
         clear_highlight(bufnr, line_number)
       end
     end
@@ -253,16 +311,13 @@ local function clear_all_bookmarks()
   save_bookmarks()
 end
 
-
 local function list_current_buffer_bookmarks()
   list_bookmarks_telescope(false)
 end
 
-
 local function list_all_bookmarks()
   list_bookmarks_telescope(true)
 end
-
 
 M.toggle_bookmark = toggle_bookmark
 M.list_current_buffer_bookmarks = list_current_buffer_bookmarks
