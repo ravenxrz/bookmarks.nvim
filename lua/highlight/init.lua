@@ -5,12 +5,16 @@ local M = {}
 local config = {
   file_path = vim.fn.stdpath("data") .. "/bookmarks.json",
   highlight_group = "BookmarkLine",
+  interval = 5
 }
 
 -- 书签数据
 local bookmarks = {}
 local namespace_id = nil
 local attached_buffers = {}
+local bookmarks_modified = false
+local timer
+
 
 -- 获取 buffer 名称
 local function get_buf_name(bufnr)
@@ -43,6 +47,9 @@ end
 
 -- 保存书签
 local function save_bookmarks()
+  if not bookmarks_modified then
+    return
+  end
   -- 转换 bookmarks 为可编码的数据结构
   local encoded_bookmarks = {}
   for buf_name, bookmarked_lines in pairs(bookmarks) do
@@ -53,7 +60,6 @@ local function save_bookmarks()
     encoded_bookmarks[buf_name] = encoded_lines
   end
 
-
   local encoded = vim.json.encode(encoded_bookmarks)
   local file = io.open(config.file_path, "w")
   if not file then
@@ -62,6 +68,8 @@ local function save_bookmarks()
 
   file:write(encoded)
   file:close()
+
+  bookmarks_modified = false
 end
 
 -- 加载书签
@@ -138,7 +146,7 @@ local function toggle_bookmark()
   -- 同步 bookmarks 数据
   bookmarks[buf_name] = bookmarked_lines
 
-  save_bookmarks()
+  bookmarks_modified = true
 end
 
 -- 列出书签 (Telescope)
@@ -211,21 +219,17 @@ local function update_bookmark_lines(bufnr, start_line, delta)
     return
   end
 
-  changed = false
   local new_bookmarked_lines = {}
   for line_number, _ in pairs(bookmarked_lines) do
     if line_number >= start_line then
       new_bookmarked_lines[line_number + delta] = true
-      changed = true
+      bookmarks_modified = true
     else
       new_bookmarked_lines[line_number] = true
     end
   end
 
   bookmarks[buf_name] = new_bookmarked_lines
-  if changed then
-    save_bookmarks()
-  end
 end
 
 -- 附加缓冲区监听
@@ -253,6 +257,25 @@ local function attach_buffer(bufnr)
   attached_buffers[bufnr] = true
 end
 
+
+-- Setup 函数中添加
+local function setup_timer()
+  timer = vim.loop.new_timer()
+  timer:start(
+    config.interval * 1000,
+    config.interval * 1000,
+    vim.schedule_wrap(save_bookmarks)
+  )
+end
+
+local function unload_timer()
+  if timer then
+    timer:stop()
+    timer:close()
+  end
+end
+
+
 -- 设置自动命令
 local function setup_autocommands()
   vim.api.nvim_create_autocmd("BufEnter", {
@@ -267,6 +290,13 @@ local function setup_autocommands()
       attach_buffer(bufnr)
     end,
   })
+
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = vim.api.nvim_create_augroup("BookmarkPluginCleanup", { clear = true }),
+    callback = function()
+      unload_timer()
+    end,
+  })
 end
 
 -- Setup 函数
@@ -275,6 +305,7 @@ local function setup()
   setup_highlight()
   setup_autocommands()
   load_bookmarks()
+  setup_timer()
 end
 
 -- 清除当前 buffer 书签的函数
