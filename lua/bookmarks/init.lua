@@ -5,7 +5,7 @@ local M = {}
 local config = {
   file_path = vim.fn.stdpath("data") .. "/bookmarks.json",
   highlight_group = "BookmarkLine",
-  interval = 5
+  interval = 2
 }
 
 -- 书签数据
@@ -206,7 +206,7 @@ end
 
 -- 设置高亮
 local function setup_highlight()
-  vim.api.nvim_set_hl(0, config.highlight_group, { bg = "#458588" })
+  vim.api.nvim_set_hl(0, config.highlight_group, { bg = "#98FB98" }) -- 淡绿色
 end
 
 -- 更新书签行号
