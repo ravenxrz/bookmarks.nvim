@@ -44,7 +44,6 @@ local function clear_highlight(bufnr, line_number)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace_id, line_number - 1, line_number)
 end
 
-
 -- 保存书签
 local function save_bookmarks()
   if not bookmarks_modified then
@@ -87,7 +86,6 @@ local function load_bookmarks()
   end
 
   local decoded = vim.json.decode(content)
-
   if not decoded then
     return
   end
@@ -350,11 +348,61 @@ local function list_all_bookmarks()
   list_bookmarks_telescope(true)
 end
 
+-- 跳转到下一个书签
+local function goto_next_bookmark()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local buf_name = get_buf_name(bufnr)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local current_line = cursor[1]
+
+  local bookmarked_lines = bookmarks[buf_name]
+  if not bookmarked_lines then
+    return
+  end
+
+  local next_line = math.huge
+  for line_number, _ in pairs(bookmarked_lines) do
+    if line_number > current_line and line_number < next_line then
+      next_line = line_number
+    end
+  end
+
+  if next_line ~= math.huge then
+    vim.api.nvim_win_set_cursor(0, { next_line, 0 })
+  end
+end
+
+-- 跳转到上一个书签
+local function goto_prev_bookmark()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local buf_name = get_buf_name(bufnr)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local current_line = cursor[1]
+
+  local bookmarked_lines = bookmarks[buf_name]
+  if not bookmarked_lines then
+    return
+  end
+
+  local prev_line = -math.huge
+  for line_number, _ in pairs(bookmarked_lines) do
+    if line_number < current_line and line_number > prev_line then
+      prev_line = line_number
+    end
+  end
+
+  if prev_line ~= -math.huge then
+    vim.api.nvim_win_set_cursor(0, { prev_line, 0 })
+  end
+end
+
 M.toggle_bookmark = toggle_bookmark
 M.list_current_buffer_bookmarks = list_current_buffer_bookmarks
 M.list_all_buffer_bookmarks = list_all_bookmarks
 M.clear_current_buffer_bookmarks = clear_current_buffer_bookmarks
 M.clear_all_bookmarks = clear_all_bookmarks
+M.goto_next_bookmark = goto_next_bookmark
+M.goto_prev_bookmark = goto_prev_bookmark
 M.setup = setup
 
 return M
