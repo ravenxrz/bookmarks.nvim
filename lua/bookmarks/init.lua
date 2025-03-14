@@ -212,7 +212,6 @@ local function list_bookmarks_telescope(all_buffers)
     end
   end
 
-  -- opts = require("telescope.themes").get_ivy {}
   require("telescope.pickers").new({}, {
     prompt_title = "Bookmarks",
     finder = require("telescope.finders").new_table({
@@ -267,17 +266,35 @@ local function update_bookmark_lines(bufnr, start_line, delta)
   end
 
   local new_bookmarked_lines = {}
-  for line_number, _ in pairs(bookmarked_lines) do
-    if line_number >= start_line then
-      new_bookmarked_lines[line_number + delta] = true
-      bookmarks_modified = true
-    else
-      new_bookmarked_lines[line_number] = true
+  if delta < 0 then
+    -- 处理删除行的情况
+    for line_number, _ in pairs(bookmarked_lines) do
+      if line_number >= start_line and line_number < start_line - delta then
+        -- 删除的行包含书签，从 bookmarks 中移除
+        bookmarked_lines[line_number] = nil
+        bookmarks_modified = true
+      elseif line_number >= start_line - delta then
+        new_bookmarked_lines[line_number + delta] = true
+        bookmarks_modified = true
+      else
+        new_bookmarked_lines[line_number] = true
+      end
+    end
+  else
+    -- 处理插入行的情况
+    for line_number, _ in pairs(bookmarked_lines) do
+      if line_number >= start_line then
+        new_bookmarked_lines[line_number + delta] = true
+        bookmarks_modified = true
+      else
+        new_bookmarked_lines[line_number] = true
+      end
     end
   end
 
   bookmarks[buf_name] = new_bookmarked_lines
 end
+
 
 -- 附加缓冲区监听
 local function attach_buffer(bufnr)
