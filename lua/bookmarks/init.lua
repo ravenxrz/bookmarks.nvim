@@ -147,6 +147,46 @@ local function toggle_bookmark()
   bookmarks_modified = true
 end
 
+-- 来查找项目根目录
+local function find_project_root(start_dir)
+  local current_dir = start_dir
+  while true do
+    local git_dir = current_dir .. "/.git"
+    local file = io.open(git_dir, "r")
+    if file then
+      file:close()
+      return current_dir
+    end
+    local parent_dir = current_dir:match("^(.*)/[^/]+$")
+    if not parent_dir or parent_dir == current_dir then
+      break
+    end
+    current_dir = parent_dir
+  end
+  return nil
+end
+
+-- 获取相对于项目根目录的路径
+local function get_relative_path(file_path)
+    -- 获取当前文件所在目录
+    local current_dir = vim.fn.expand("%:p:h")
+    -- 查找项目根目录
+    local project_root = find_project_root(current_dir)
+    if project_root then
+        -- 获取当前系统的路径分隔符
+        local sep = package.config:sub(1, 1)
+        -- 确保项目根目录以路径分隔符结尾
+        if not project_root:match(sep .. "$") then
+            project_root = project_root .. sep
+        end
+        -- 计算相对路径
+        local pattern = "^" .. project_root:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+        local relative_path = file_path:gsub(pattern, "")
+        return relative_path
+    end
+    return file_path
+end
+
 -- 列出书签 (Telescope)
 local function list_bookmarks_telescope(all_buffers)
   local entries = {}
@@ -165,14 +205,16 @@ local function list_bookmarks_telescope(all_buffers)
             bufnr = bufnr,
             line = line_number,
             filename = buf_name,
-            display = string.format("%s:%s: %s", buf_name, line_number, line_content),
+            -- 只显示文件路径和行号
+            display = string.format("%s:%s", get_relative_path(buf_name), line_number),
           })
         end
       end
     end
   end
 
-  require("telescope.pickers").new({}, {
+  opts = require("telescope.themes").get_ivy {}
+  require("telescope.pickers").new(opts, {
     prompt_title = "Bookmarks",
     finder = require("telescope.finders").new_table({
       results = entries,
@@ -181,6 +223,9 @@ local function list_bookmarks_telescope(all_buffers)
           value = entry.value,
           display = entry.display,
           ordinal = entry.value,
+          -- 为预览提供必要信息
+          filename = entry.filename,
+          lnum = entry.line,
         }
       end,
     }),
