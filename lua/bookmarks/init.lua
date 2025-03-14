@@ -168,23 +168,23 @@ end
 
 -- 获取相对于项目根目录的路径
 local function get_relative_path(file_path)
-    -- 获取当前文件所在目录
-    local current_dir = vim.fn.expand("%:p:h")
-    -- 查找项目根目录
-    local project_root = find_project_root(current_dir)
-    if project_root then
-        -- 获取当前系统的路径分隔符
-        local sep = package.config:sub(1, 1)
-        -- 确保项目根目录以路径分隔符结尾
-        if not project_root:match(sep .. "$") then
-            project_root = project_root .. sep
-        end
-        -- 计算相对路径
-        local pattern = "^" .. project_root:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
-        local relative_path = file_path:gsub(pattern, "")
-        return relative_path
+  -- 获取当前文件所在目录
+  local current_dir = vim.fn.expand("%:p:h")
+  -- 查找项目根目录
+  local project_root = find_project_root(current_dir)
+  if project_root then
+    -- 获取当前系统的路径分隔符
+    local sep = package.config:sub(1, 1)
+    -- 确保项目根目录以路径分隔符结尾
+    if not project_root:match(sep .. "$") then
+      project_root = project_root .. sep
     end
-    return file_path
+    -- 计算相对路径
+    local pattern = "^" .. project_root:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+    local relative_path = file_path:gsub(pattern, "")
+    return relative_path
+  end
+  return file_path
 end
 
 -- 列出书签 (Telescope)
@@ -199,9 +199,8 @@ local function list_bookmarks_telescope(all_buffers)
       local bufnr = vim.fn.bufnr(buf_name)
       if bufnr > 0 then
         for line_number, _ in pairs(bookmarked_lines) do
-          local line_content = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)[1]
           table.insert(entries, {
-            value = buf_name .. ":" .. line_number .. ": " .. line_content,
+            value = buf_name .. ":" .. line_number,
             bufnr = bufnr,
             line = line_number,
             filename = buf_name,
@@ -213,8 +212,8 @@ local function list_bookmarks_telescope(all_buffers)
     end
   end
 
-  opts = require("telescope.themes").get_ivy {}
-  require("telescope.pickers").new(opts, {
+  -- opts = require("telescope.themes").get_ivy {}
+  require("telescope.pickers").new({}, {
     prompt_title = "Bookmarks",
     finder = require("telescope.finders").new_table({
       results = entries,
@@ -229,7 +228,12 @@ local function list_bookmarks_telescope(all_buffers)
         }
       end,
     }),
-    sorter = require("telescope.sorters").get_generic_fuzzy_sorter(),
+    sorter = require("telescope.sorters").get_fuzzy_file(),
+    previewer = require("telescope.previewers").vim_buffer_vimgrep.new({
+      title = "Bookmark Preview",
+      use_ft_detect = true,
+      filesize_limit = 20, -- 预览文件大小限制（MB）
+    }),
     attach_mappings = function(prompt_bufnr, map)
       map("n", "<CR>", function()
         local selection = require("telescope.actions.state").get_selected_entry()
