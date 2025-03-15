@@ -254,7 +254,7 @@ end
 
 -- 设置高亮
 local function setup_highlight()
-  vim.api.nvim_set_hl(0, config.highlight_group, { bg = "#98FB98" }) -- 淡绿色
+  vim.api.nvim_set_hl(1, config.highlight_group, { bg = "#98FB98" }) -- 淡绿色
 end
 
 -- 更新书签行号
@@ -358,6 +358,7 @@ local function setup_autocommands()
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = vim.api.nvim_create_augroup("BookmarkPluginCleanup", { clear = true }),
     callback = function()
+      save_bookmarks()
       unload_timer()
     end,
   })
