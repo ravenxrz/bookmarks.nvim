@@ -10,7 +10,7 @@ local config = {
 
 -- 书签数据
 local bookmarks = {}
-local namespace_id = nil
+local namespace_id = vim.api.nvim_create_namespace("ravenxrz_bookmarks")
 local attached_buffers = {}
 local bookmarks_modified = false
 local timer
@@ -32,7 +32,7 @@ local function apply_highlight(bufnr, line_number)
     line_number - 1,
     0,
     {
-      end_line = line_number - 1,
+      end_row = line_number - 1,
       end_col = line_length, -- 行尾
       hl_group = config.highlight_group,
     }
@@ -248,13 +248,9 @@ local function list_bookmarks_telescope(all_buffers)
   }):find()
 end
 
-local function create_ns()
-  namespace_id = vim.api.nvim_create_namespace("ravenxrz_bookmarks")
-end
-
 -- 设置高亮
 local function setup_highlight()
-  vim.api.nvim_set_hl(1, config.highlight_group, { bg = "#98FB98" }) -- 淡绿色
+  vim.api.nvim_set_hl(0, config.highlight_group, { bg = "#98FB98" }) -- 淡绿色
 end
 
 -- 更新书签行号
@@ -366,7 +362,6 @@ end
 
 -- Setup 函数
 local function setup()
-  create_ns()
   setup_highlight()
   setup_autocommands()
   load_bookmarks()
