@@ -24,6 +24,9 @@ end
 -- 应用高亮
 local function apply_highlight(bufnr, line_number)
   local lines = vim.api.nvim_buf_get_lines(bufnr, line_number - 1, line_number, false)
+  if #lines == 0 then
+    return
+  end
   local line = lines[1]
   local line_length = string.len(line)
   vim.api.nvim_buf_set_extmark(
